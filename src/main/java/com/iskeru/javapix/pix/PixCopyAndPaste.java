@@ -61,7 +61,7 @@ public class PixCopyAndPaste {
             add(codeBuilder, Fields.MERCHANT_COUNTRY, to.pais());
         }
         if (to != null && to.nome() != null && !to.nome().isEmpty()) {
-            add(codeBuilder, Fields.MERCHANT_NAME, to.nome(), Fields.MERCHANT_NAME_LENGTH);
+            add(codeBuilder, Fields.MERCHANT_NAME, to.nome(), Fields.MERCHANT_NAME_MAXLENGTH);
         }
         if (to != null && to.cidade() != null && !to.cidade().isEmpty()) {
             add(codeBuilder, Fields.MERCHANT_CITY, to.cidade());
@@ -69,7 +69,7 @@ public class PixCopyAndPaste {
 
         if (transfer.idTransacao() != null && !transfer.idTransacao().isEmpty()) {
             StringBuilder addData = new StringBuilder();
-            add(addData, Fields.ADDITIONAL_DATA_TXID, transfer.idTransacao());
+            add(addData, Fields.ADDITIONAL_DATA_TXID, transfer.idTransacao(), Fields.ADDITIONAL_DATA_TXID_MAXLENGTH);
             add(codeBuilder, Fields.ADDITIONAL_DATA, addData.toString());
         }
 
@@ -111,6 +111,8 @@ public class PixCopyAndPaste {
         public static String MERCHANT_ACCOUNT_INFO_PIX_KEY = "01";
 
         public static String ADDITIONAL_DATA = "62";
+
+        private static Optional<Integer> ADDITIONAL_DATA_TXID_MAXLENGTH = Optional.of(25);
         public static String ADDITIONAL_DATA_TXID = "05";
 
         public static String MERCHANT_CATEGORY = "52";
@@ -122,7 +124,7 @@ public class PixCopyAndPaste {
 
         public static String MERCHANT_COUNTRY = "58";
         public static String MERCHANT_NAME = "59";
-        public static Optional<Integer> MERCHANT_NAME_LENGTH = Optional.of(25);
+        static Optional<Integer> MERCHANT_NAME_MAXLENGTH = Optional.of(25);
         public static String MERCHANT_CITY = "60";
 
         public static String CRC16 = "63";
