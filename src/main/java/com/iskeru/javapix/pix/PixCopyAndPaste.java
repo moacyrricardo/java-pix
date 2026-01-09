@@ -7,21 +7,44 @@ import java.math.RoundingMode;
 import java.util.Optional;
 
 /**
- * Class to build PIX copia e cola codes.
- * Based on QR Code Estático from <a href="https://www.bcb.gov.br/content/estabilidadefinanceira/pix/Regulamento_Pix/II_ManualdePadroesparaIniciacaodoPix.pdf">Manual PIX</a>
+ * Builder for PIX "copia e cola" (copy and paste) payload strings.
+ * <p>
+ * This class assembles a static PIX QR payload according to the Banco Central do Brasil
+ * specification (QR Code Estático) described in the
+ * <a href="https://www.bcb.gov.br/content/estabilidadefinanceira/pix/Regulamento_Pix/II_ManualdePadroesparaIniciacaodoPix.pdf">Manual PIX</a>.
+ * Provide the target (merchant/payee) information via {@link PixTarget}, transaction details via
+ * {@link PixTransaction}, and an optional free-form message. Then call {@link #generate()} to
+ * produce the final EMV-like payload, including a CRC-16/CCITT checksum.
+ * </p>
  */
 @Builder
 public class PixCopyAndPaste {
+    /**
+     * Convenience constant to convert between BRL with 2 decimals and integer cents representation.
+     */
     public static final BigDecimal HUNDRED = new BigDecimal("100");
     private PixTarget to;
     private PixTransaction transfer;
     private String message;
 
+    /**
+     * Generates a complete PIX payload, including the CRC-16 field.
+     *
+     * @return the EMV-formatted PIX payload ready to be embedded in a QR code or copied as text
+     * @throws IllegalArgumentException if required data is missing or violates basic constraints
+     */
     public String generate() {
         return generate(true);
     }
 
     //visible for test
+    /**
+     * Generates the PIX payload, optionally skipping the CRC field (useful for tests).
+     *
+     * @param withCrc whether the CRC-16 field should be appended
+     * @return the EMV-formatted PIX payload
+     * @throws IllegalArgumentException if required data is missing or violates basic constraints
+     */
     protected String generate(boolean withCrc) {
         // Validações (opcional)
 
@@ -82,10 +105,26 @@ public class PixCopyAndPaste {
 
         return codeBuilder.toString();
     }
+    /**
+     * Appends a TLV (tag-length-value) field to the given buffer.
+     *
+     * @param sb destination buffer
+     * @param field 2-character field identifier
+     * @param value raw value to be encoded
+     */
     public void add(StringBuilder sb, String field, String value) {
         add(sb, field, value, Optional.empty());
     }
 
+    /**
+     * Appends a TLV (tag-length-value) field to the given buffer, capping the value length
+     * if a maximum is provided by the specification.
+     *
+     * @param sb destination buffer
+     * @param field 2-character field identifier
+     * @param value raw value to be encoded
+     * @param maxLength optional maximum value length; if value exceeds it, it will be truncated
+     */
     public void add(StringBuilder sb, String field, String value, Optional<Integer> maxLength) {
         sb.append(field);
         int valLen = value.length();
@@ -101,6 +140,9 @@ public class PixCopyAndPaste {
         }
     }
 
+    /**
+     * EMV/PIX field identifiers and constants used to build the payload.
+     */
     static class Fields {
         public static String PAYLOAD_FORMAT_INDICATOR = "00";
         public static String MERCHANT_ACCOUNT_INFO = "26";
@@ -127,6 +169,7 @@ public class PixCopyAndPaste {
         static Optional<Integer> MERCHANT_NAME_MAXLENGTH = Optional.of(25);
         public static String MERCHANT_CITY = "60";
 
+        /** Field identifier for the CRC-16 result. */
         public static String CRC16 = "63";
     }
 }

@@ -2,9 +2,29 @@ package com.iskeru.javapix.pix;
 
 import com.github.snksoft.crc.CRC;
 
+/**
+ * Utilities for computing CRC-16/CCITT checksums used in PIX QR payloads.
+ * <p>
+ * The Brazilian PIX "copia e cola"/QR payload includes a trailing field with a CRC-16/CCITT
+ * checksum (polynomial 0x1021). This class provides a small helper to compute that checksum and
+ * format it as an uppercase hexadecimal string as required by the standard.
+ * </p>
+ */
 public final class PixCRC16 {
     private PixCRC16(){}
 
+    /**
+     * Computes the CRC-16/CCITT checksum for the given PIX payload prefix.
+     * <p>
+     * The caller is expected to pass the full payload up to the CRC field identifier and length
+     * (e.g. appending {@code "63" + "04"} prior to calculation) so that the checksum matches the
+     * specification. The result is returned as an uppercase hexadecimal string with left padding
+     * when necessary.
+     * </p>
+     *
+     * @param partialCode full PIX payload up to (but not including) the CRC value itself
+     * @return the CRC-16/CCITT checksum encoded as 4 hex characters in uppercase
+     */
     public static String crcChecksum(final String partialCode){
         final byte[] byteArray = partialCode.getBytes();
 
