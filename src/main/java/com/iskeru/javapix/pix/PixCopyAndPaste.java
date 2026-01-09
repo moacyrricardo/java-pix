@@ -27,6 +27,13 @@ public class PixCopyAndPaste {
     private PixTransaction transfer;
     private String message;
 
+    /** @return returns the PixTarget **/
+    public PixTarget to() { return to; }
+    /** @return returns the pix transfer **/
+    public PixTransaction transfer() { return transfer; }
+    /** @return returns the pix message **/
+    public String message() { return message; }
+
     /**
      * Generates a complete PIX payload, including the CRC-16 field.
      *
