@@ -2,6 +2,8 @@ package com.iskeru.javapix.pix;
 
 import com.github.snksoft.crc.CRC;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * Utilities for computing CRC-16/CCITT checksums used in PIX QR payloads.
  * <p>
@@ -26,7 +28,7 @@ public final class PixCRC16 {
      * @return the CRC-16/CCITT checksum encoded as 4 hex characters in uppercase
      */
     public static String crcChecksum(final String partialCode){
-        final byte[] byteArray = partialCode.getBytes();
+        final byte[] byteArray = partialCode.getBytes(StandardCharsets.UTF_8);
 
         long ccittCrc = CRC.calculateCRC(CRC.Parameters.CCITT, byteArray);
         return leftPad(Long.toHexString(ccittCrc), 4).toUpperCase();

@@ -3,6 +3,8 @@ package com.iskeru.javapix.pix;
 import lombok.Builder;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -59,13 +61,31 @@ public class PixCopyAndPaste {
         if (transfer == null || transfer.valorTransacao() == null) {
             throw new IllegalArgumentException("Valor da transação inválido");
         }
-
-        if (to == null || to.cidade() != null && to.cidade().length() > 50) {
-            throw new IllegalArgumentException("Cidade inválida");
+        if (transfer.valorTransacao().signum() <= 0) {
+            throw new IllegalArgumentException("Valor da transação deve ser positivo");
+        }
+        String valor;
+        try {
+            valor = transfer.valorTransacao().setScale(2, RoundingMode.UNNECESSARY).toPlainString();
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("Valor da transação deve ter no máximo 2 casas decimais");
+        }
+        if (transfer.currency() != null && !"BRL".equals(transfer.currency())) {
+            throw new IllegalArgumentException("Apenas BRL é suportado: " + transfer.currency());
         }
 
         if (to == null || to.chavePix() == null || to.chavePix().isEmpty()) {
             throw new IllegalArgumentException("Chave Pix inválida");
+        }
+
+        // 59 and 60 are mandatory
+        String nome = toAscii(to.nome());
+        if (nome.isEmpty()) {
+            throw new IllegalArgumentException("Nome do recebedor é obrigatório");
+        }
+        String cidade = toAscii(to.cidade());
+        if (cidade.isEmpty()) {
+            throw new IllegalArgumentException("Cidade do recebedor é obrigatória");
         }
 
         StringBuilder codeBuilder = new StringBuilder();
@@ -80,30 +100,24 @@ public class PixCopyAndPaste {
 
         add(codeBuilder, Fields.MERCHANT_CATEGORY, Fields.EMPTY_MERCHANT);
 
-        if (transfer.currency() == null || "BRL".equals(transfer.currency())) {
-            add(codeBuilder, Fields.TRANSACTION_CURRENCY, Fields.TRANSACTION_CURRENCY_BRL);
-        }
-        add(codeBuilder, Fields.TRANSACTION_VALUE, transfer.valorTransacao().setScale(2).toString());
+        add(codeBuilder, Fields.TRANSACTION_CURRENCY, Fields.TRANSACTION_CURRENCY_BRL);
+        add(codeBuilder, Fields.TRANSACTION_VALUE, valor);
 
         // 58 is mandatory: default to BR
         String pais = to.pais() != null && !to.pais().isEmpty() ? to.pais() : PixTarget.BRASIL;
         add(codeBuilder, Fields.MERCHANT_COUNTRY, pais);
-        if (to.nome() != null && !to.nome().isEmpty()) {
-            add(codeBuilder, Fields.MERCHANT_NAME, stripAccents(to.nome()), Fields.MERCHANT_NAME_MAXLENGTH);
-        }
-        if (to.cidade() != null && !to.cidade().isEmpty()) {
-            add(codeBuilder, Fields.MERCHANT_CITY, stripAccents(to.cidade()), Fields.MERCHANT_CITY_MAXLENGTH);
-        }
+        add(codeBuilder, Fields.MERCHANT_NAME, nome, Fields.MERCHANT_NAME_MAXLENGTH);
+        add(codeBuilder, Fields.MERCHANT_CITY, cidade, Fields.MERCHANT_CITY_MAXLENGTH);
 
         // 62 is mandatory: txid "***" means no txid informed
         String txid = transfer.idTransacao();
         if (txid == null || txid.isEmpty()) {
             txid = Fields.ADDITIONAL_DATA_TXID_NONE;
         } else if (!Fields.ADDITIONAL_DATA_TXID_CHARSET.matcher(txid).matches()) {
-            throw new IllegalArgumentException("txid deve conter apenas caracteres alfanuméricos (A-Z, a-z, 0-9): " + txid);
+            throw new IllegalArgumentException("txid deve ter de 1 a 25 caracteres alfanuméricos (A-Z, a-z, 0-9): " + txid);
         }
         StringBuilder addData = new StringBuilder();
-        add(addData, Fields.ADDITIONAL_DATA_TXID, txid, Fields.ADDITIONAL_DATA_TXID_MAXLENGTH);
+        add(addData, Fields.ADDITIONAL_DATA_TXID, txid);
         add(codeBuilder, Fields.ADDITIONAL_DATA, addData.toString());
 
         if (withCrc) {
@@ -117,11 +131,15 @@ public class PixCopyAndPaste {
     }
 
     /**
-     * Removes accents (e.g. "São" becomes "Sao"): accented characters take more than one byte
-     * and break the declared field length.
+     * Removes accents (e.g. "São" becomes "Sao"), drops any remaining non-printable-ASCII character
+     * and trims. Non-ASCII characters take more than one byte and break the declared field length.
      */
-    static String stripAccents(String value) {
-        return Normalizer.normalize(value, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+    static String toAscii(String value) {
+        if (value == null) {
+            return "";
+        }
+        String noAccents = Normalizer.normalize(value, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        return noAccents.replaceAll("[^\\x20-\\x7E]", "").trim();
     }
 
     /**
@@ -143,12 +161,17 @@ public class PixCopyAndPaste {
      * @param field 2-character field identifier
      * @param value raw value to be encoded
      * @param maxLength optional maximum value length; if value exceeds it, it will be truncated
+     * @throws IllegalArgumentException if the encoded value is longer than 99 bytes
      */
     public void add(StringBuilder sb, String field, String value, Optional<Integer> maxLength) {
         String v = maxLength.isPresent() && value.length() > maxLength.get()
                 ? value.substring(0, maxLength.get())
                 : value;
-        sb.append(field).append(String.format("%02d", v.length())).append(v);
+        int byteLen = v.getBytes(StandardCharsets.UTF_8).length;
+        if (byteLen > 99) {
+            throw new IllegalArgumentException("Campo " + field + " excede 99 bytes");
+        }
+        sb.append(field).append(String.format("%02d", byteLen)).append(v);
     }
 
     /**
@@ -165,11 +188,10 @@ public class PixCopyAndPaste {
 
         public static String ADDITIONAL_DATA = "62";
 
-        private static Optional<Integer> ADDITIONAL_DATA_TXID_MAXLENGTH = Optional.of(25);
         public static String ADDITIONAL_DATA_TXID = "05";
         /** Value used in field 62.05 when no txid is informed (static BR Code). */
         public static String ADDITIONAL_DATA_TXID_NONE = "***";
-        static Pattern ADDITIONAL_DATA_TXID_CHARSET = Pattern.compile("[A-Za-z0-9]+");
+        static Pattern ADDITIONAL_DATA_TXID_CHARSET = Pattern.compile("[A-Za-z0-9]{1,25}");
 
         public static String MERCHANT_CATEGORY = "52";
         public static String EMPTY_MERCHANT = "0000";
