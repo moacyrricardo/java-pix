@@ -3,6 +3,7 @@ package com.iskeru.javapix.pix;
 import lombok.Builder;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.Normalizer;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -59,6 +60,18 @@ public class PixCopyAndPaste {
         if (transfer == null || transfer.valorTransacao() == null) {
             throw new IllegalArgumentException("Valor da transação inválido");
         }
+        if (transfer.valorTransacao().signum() <= 0) {
+            throw new IllegalArgumentException("Valor da transação deve ser positivo");
+        }
+        String valor;
+        try {
+            valor = transfer.valorTransacao().setScale(2, RoundingMode.UNNECESSARY).toPlainString();
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("Valor da transação deve ter no máximo 2 casas decimais");
+        }
+        if (transfer.currency() != null && !"BRL".equals(transfer.currency())) {
+            throw new IllegalArgumentException("Apenas BRL é suportado: " + transfer.currency());
+        }
 
         if (to == null || to.chavePix() == null || to.chavePix().isEmpty()) {
             throw new IllegalArgumentException("Chave Pix inválida");
@@ -86,10 +99,8 @@ public class PixCopyAndPaste {
 
         add(codeBuilder, Fields.MERCHANT_CATEGORY, Fields.EMPTY_MERCHANT);
 
-        if (transfer.currency() == null || "BRL".equals(transfer.currency())) {
-            add(codeBuilder, Fields.TRANSACTION_CURRENCY, Fields.TRANSACTION_CURRENCY_BRL);
-        }
-        add(codeBuilder, Fields.TRANSACTION_VALUE, transfer.valorTransacao().setScale(2).toString());
+        add(codeBuilder, Fields.TRANSACTION_CURRENCY, Fields.TRANSACTION_CURRENCY_BRL);
+        add(codeBuilder, Fields.TRANSACTION_VALUE, valor);
 
         // 58 is mandatory: default to BR
         String pais = to.pais() != null && !to.pais().isEmpty() ? to.pais() : PixTarget.BRASIL;
