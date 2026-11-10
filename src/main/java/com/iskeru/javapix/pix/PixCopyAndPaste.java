@@ -102,10 +102,10 @@ public class PixCopyAndPaste {
         if (txid == null || txid.isEmpty()) {
             txid = Fields.ADDITIONAL_DATA_TXID_NONE;
         } else if (!Fields.ADDITIONAL_DATA_TXID_CHARSET.matcher(txid).matches()) {
-            throw new IllegalArgumentException("txid deve conter apenas caracteres alfanuméricos (A-Z, a-z, 0-9): " + txid);
+            throw new IllegalArgumentException("txid deve ter de 1 a 25 caracteres alfanuméricos (A-Z, a-z, 0-9): " + txid);
         }
         StringBuilder addData = new StringBuilder();
-        add(addData, Fields.ADDITIONAL_DATA_TXID, txid, Fields.ADDITIONAL_DATA_TXID_MAXLENGTH);
+        add(addData, Fields.ADDITIONAL_DATA_TXID, txid);
         add(codeBuilder, Fields.ADDITIONAL_DATA, addData.toString());
 
         if (withCrc) {
@@ -171,11 +171,10 @@ public class PixCopyAndPaste {
 
         public static String ADDITIONAL_DATA = "62";
 
-        private static Optional<Integer> ADDITIONAL_DATA_TXID_MAXLENGTH = Optional.of(25);
         public static String ADDITIONAL_DATA_TXID = "05";
         /** Value used in field 62.05 when no txid is informed (static BR Code). */
         public static String ADDITIONAL_DATA_TXID_NONE = "***";
-        static Pattern ADDITIONAL_DATA_TXID_CHARSET = Pattern.compile("[A-Za-z0-9]+");
+        static Pattern ADDITIONAL_DATA_TXID_CHARSET = Pattern.compile("[A-Za-z0-9]{1,25}");
 
         public static String MERCHANT_CATEGORY = "52";
         public static String EMPTY_MERCHANT = "0000";

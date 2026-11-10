@@ -56,6 +56,12 @@ public class PixCopyAndPasteTest {
     }
 
     @Test
+    void txidLongerThan25IsRejectedNotTruncated() {
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target(), tx().idTransacao("A".repeat(26)))::generate);
+        Assertions.assertTrue(pix(target(), tx().idTransacao("A".repeat(25))).generate(false).endsWith("0525" + "A".repeat(25)));
+    }
+
+    @Test
     void cityIsCappedAndAccentsRemoved() {
         Assertions.assertTrue(pix(target().cidade("São José dos Campos").nome("João Conceição"), tx().idTransacao("myidis1"))
                 .generate(false).contains("5914Joao Conceicao6015Sao Jose dos Ca62"));
