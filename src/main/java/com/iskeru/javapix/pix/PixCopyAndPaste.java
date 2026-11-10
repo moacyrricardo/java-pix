@@ -4,6 +4,7 @@ import lombok.Builder;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -160,12 +161,17 @@ public class PixCopyAndPaste {
      * @param field 2-character field identifier
      * @param value raw value to be encoded
      * @param maxLength optional maximum value length; if value exceeds it, it will be truncated
+     * @throws IllegalArgumentException if the encoded value is longer than 99 bytes
      */
     public void add(StringBuilder sb, String field, String value, Optional<Integer> maxLength) {
         String v = maxLength.isPresent() && value.length() > maxLength.get()
                 ? value.substring(0, maxLength.get())
                 : value;
-        sb.append(field).append(String.format("%02d", v.length())).append(v);
+        int byteLen = v.getBytes(StandardCharsets.UTF_8).length;
+        if (byteLen > 99) {
+            throw new IllegalArgumentException("Campo " + field + " excede 99 bytes");
+        }
+        sb.append(field).append(String.format("%02d", byteLen)).append(v);
     }
 
     /**

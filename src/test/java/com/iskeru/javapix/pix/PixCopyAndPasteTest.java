@@ -92,6 +92,11 @@ public class PixCopyAndPasteTest {
     }
 
     @Test
+    void fieldLongerThan99BytesIsRejected() {
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target().chavePix("k".repeat(100)), tx())::generate);
+    }
+
+    @Test
     void testItau() {
         PixCopyAndPaste pix = pix(
                 PixTarget.builder().chavePix("my-email-key@email.com").pais(PixTarget.BRASIL).cidade("SAO PAULO").nome("MY super user name blabla"),
