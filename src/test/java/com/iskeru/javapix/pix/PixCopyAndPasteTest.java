@@ -62,6 +62,18 @@ public class PixCopyAndPasteTest {
     }
 
     @Test
+    void nameAndCityAreRequired() {
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target().nome(null), tx())::generate);
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target().cidade(" "), tx())::generate);
+    }
+
+    @Test
+    void nonAsciiIsDroppedFromNameAndCity() {
+        Assertions.assertTrue(pix(target().nome("Café ☕ Bar").cidade(" RIO "), tx()).generate(false)
+                .contains("5909Cafe  Bar6003RIO62"));
+    }
+
+    @Test
     void testItau() {
         PixCopyAndPaste pix = pix(
                 PixTarget.builder().chavePix("my-email-key@email.com").pais(PixTarget.BRASIL).cidade("SAO PAULO").nome("MY super user name blabla"),
