@@ -4,7 +4,10 @@ import lombok.Builder;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * Builder for PIX "copia e cola" (copy and paste) payload strings.
@@ -53,58 +56,64 @@ public class PixCopyAndPaste {
      * @throws IllegalArgumentException if required data is missing or violates basic constraints
      */
     protected String generate(boolean withCrc) {
-        // Validações (opcional)
-
         if (transfer == null || transfer.valorTransacao() == null) {
             throw new IllegalArgumentException("Valor da transação inválido");
         }
-
-        if (to == null || to.cidade() != null && to.cidade().length() > 50) {
-            throw new IllegalArgumentException("Cidade inválida");
+        if (transfer.valorTransacao().signum() <= 0) {
+            throw new IllegalArgumentException("Valor da transação deve ser positivo");
         }
-
-        if (to == null || to.chavePix() == null || to.chavePix().isEmpty()) {
+        if (to == null || to.chavePix() == null || to.chavePix().isBlank()) {
             throw new IllegalArgumentException("Chave Pix inválida");
         }
+        String nome = normalize(to.nome());
+        if (nome.isEmpty()) {
+            throw new IllegalArgumentException("Nome do recebedor é obrigatório");
+        }
+        String cidade = normalize(to.cidade());
+        if (cidade.isEmpty()) {
+            throw new IllegalArgumentException("Cidade do recebedor é obrigatória");
+        }
+        String pais = to.pais() == null || to.pais().isBlank() ? PixTarget.BRASIL : to.pais();
 
-        // Converte o valor da transação para String
-        String valorTransacaoStr = transfer.valorTransacao().multiply(HUNDRED).setScale(0, RoundingMode.HALF_EVEN).toString();
+        String txid = transfer.idTransacao();
+        if (txid == null || txid.isEmpty()) {
+            txid = Fields.ADDITIONAL_DATA_TXID_NONE;
+        } else if (!Fields.ADDITIONAL_DATA_TXID_PATTERN.matcher(txid).matches()) {
+            throw new IllegalArgumentException("txid deve ter de 1 a 25 caracteres alfanuméricos (A-Z, a-z, 0-9): " + txid);
+        }
+
+        String valor;
+        try {
+            valor = transfer.valorTransacao().setScale(2, RoundingMode.UNNECESSARY).toPlainString();
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("Valor da transação deve ter no máximo 2 casas decimais");
+        }
 
         StringBuilder codeBuilder = new StringBuilder();
-        // Cria o código Pix
         add(codeBuilder, Fields.PAYLOAD_FORMAT_INDICATOR, "01");
 
         StringBuilder merAccInfo = new StringBuilder();
         add(merAccInfo, Fields.MERCHANT_ACCOUNT_INFO_GUI, Fields.MERCHANT_ACCOUNT_INFO_GUI_VALUE);
-        add(merAccInfo, Fields.MERCHANT_ACCOUNT_INFO_PIX_KEY, to.chavePix());
-
+        add(merAccInfo, Fields.MERCHANT_ACCOUNT_INFO_PIX_KEY, to.chavePix().trim());
         add(codeBuilder, Fields.MERCHANT_ACCOUNT_INFO, merAccInfo.toString());
 
         add(codeBuilder, Fields.MERCHANT_CATEGORY, Fields.EMPTY_MERCHANT);
 
-        if (transfer != null && (transfer.currency() == null || "BRL".equals(transfer.currency()))) {
-            add(codeBuilder, Fields.TRANSACTION_CURRENCY, Fields.TRANSACTION_CURRENCY_BRL);
+        if (transfer.currency() != null && !"BRL".equals(transfer.currency())) {
+            throw new IllegalArgumentException("Apenas BRL é suportado: " + transfer.currency());
         }
-        add(codeBuilder, Fields.TRANSACTION_VALUE, transfer.valorTransacao().setScale(2).toString());
+        add(codeBuilder, Fields.TRANSACTION_CURRENCY, Fields.TRANSACTION_CURRENCY_BRL);
+        add(codeBuilder, Fields.TRANSACTION_VALUE, valor);
 
-        if (to != null && to.pais() != null && !to.pais().isEmpty()) {
-            add(codeBuilder, Fields.MERCHANT_COUNTRY, to.pais());
-        }
-        if (to != null && to.nome() != null && !to.nome().isEmpty()) {
-            add(codeBuilder, Fields.MERCHANT_NAME, to.nome(), Fields.MERCHANT_NAME_MAXLENGTH);
-        }
-        if (to != null && to.cidade() != null && !to.cidade().isEmpty()) {
-            add(codeBuilder, Fields.MERCHANT_CITY, to.cidade());
-        }
+        add(codeBuilder, Fields.MERCHANT_COUNTRY, pais);
+        add(codeBuilder, Fields.MERCHANT_NAME, nome, Fields.MERCHANT_NAME_MAXLENGTH);
+        add(codeBuilder, Fields.MERCHANT_CITY, cidade, Fields.MERCHANT_CITY_MAXLENGTH);
 
-        if (transfer.idTransacao() != null && !transfer.idTransacao().isEmpty()) {
-            StringBuilder addData = new StringBuilder();
-            add(addData, Fields.ADDITIONAL_DATA_TXID, transfer.idTransacao(), Fields.ADDITIONAL_DATA_TXID_MAXLENGTH);
-            add(codeBuilder, Fields.ADDITIONAL_DATA, addData.toString());
-        }
+        StringBuilder addData = new StringBuilder();
+        add(addData, Fields.ADDITIONAL_DATA_TXID, txid);
+        add(codeBuilder, Fields.ADDITIONAL_DATA, addData.toString());
 
         if (withCrc) {
-            // Formata o CRC16 como uma string hexadecimal
             String partialCode = codeBuilder.toString();
             String crcHex = PixCRC16.crcChecksum(partialCode + Fields.CRC16 + "04");
             add(codeBuilder, Fields.CRC16, crcHex);
@@ -112,6 +121,19 @@ public class PixCopyAndPaste {
 
         return codeBuilder.toString();
     }
+
+    /**
+     * Removes accents and trims the value. Name and city must be plain ASCII so that
+     * every banking app accepts them and the declared field length matches the encoded bytes.
+     */
+    static String normalize(String value) {
+        if (value == null) {
+            return "";
+        }
+        String noAccents = Normalizer.normalize(value, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        return noAccents.replaceAll("[^\\x20-\\x7E]", "").trim();
+    }
+
     /**
      * Appends a TLV (tag-length-value) field to the given buffer.
      *
@@ -131,20 +153,17 @@ public class PixCopyAndPaste {
      * @param field 2-character field identifier
      * @param value raw value to be encoded
      * @param maxLength optional maximum value length; if value exceeds it, it will be truncated
+     * @throws IllegalArgumentException if the encoded value is longer than 99 bytes
      */
     public void add(StringBuilder sb, String field, String value, Optional<Integer> maxLength) {
-        sb.append(field);
-        int valLen = value.length();
-        if (valLen < 10) {
-            sb.append("0");
+        String v = maxLength.isPresent() && value.length() > maxLength.get()
+                ? value.substring(0, maxLength.get()).trim()
+                : value;
+        int byteLen = v.getBytes(StandardCharsets.UTF_8).length;
+        if (byteLen > 99) {
+            throw new IllegalArgumentException("Campo " + field + " excede 99 bytes");
         }
-        if (maxLength.isEmpty() || maxLength.get() >= valLen) {
-            sb.append(valLen);
-            sb.append(value);
-        } else {
-            sb.append(maxLength.get());
-            sb.append(value, 0, maxLength.get());
-        }
+        sb.append(field).append(String.format("%02d", byteLen)).append(v);
     }
 
     /**
@@ -161,8 +180,10 @@ public class PixCopyAndPaste {
 
         public static String ADDITIONAL_DATA = "62";
 
-        private static Optional<Integer> ADDITIONAL_DATA_TXID_MAXLENGTH = Optional.of(25);
         public static String ADDITIONAL_DATA_TXID = "05";
+        /** Value used in field 62.05 when no txid is informed (static BR Code). */
+        public static String ADDITIONAL_DATA_TXID_NONE = "***";
+        static Pattern ADDITIONAL_DATA_TXID_PATTERN = Pattern.compile("[A-Za-z0-9]{1,25}");
 
         public static String MERCHANT_CATEGORY = "52";
         public static String EMPTY_MERCHANT = "0000";
@@ -175,6 +196,7 @@ public class PixCopyAndPaste {
         public static String MERCHANT_NAME = "59";
         static Optional<Integer> MERCHANT_NAME_MAXLENGTH = Optional.of(25);
         public static String MERCHANT_CITY = "60";
+        static Optional<Integer> MERCHANT_CITY_MAXLENGTH = Optional.of(15);
 
         /** Field identifier for the CRC-16 result. */
         public static String CRC16 = "63";
