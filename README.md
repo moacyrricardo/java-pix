@@ -17,8 +17,9 @@ Built with java 17
 ```
 
 Generated codes follow the BCB BR Code rules for static codes:
-- country (58) defaults to `BR`; accents are stripped from name and city, and city is capped at 15 characters;
-- the txid (62.05) is optional — when omitted it is sent as `***`; when present it must be alphanumeric (`A-Z`, `a-z`, `0-9`, up to 25 characters), otherwise an `IllegalArgumentException` is thrown.
+- country (58) defaults to `BR`; name (59) and city (60) are required, non-ASCII characters are stripped (accents removed), name is capped at 25 and city at 15 characters;
+- the txid (62.05) is optional — when omitted it is sent as `***`; when present it must be 1–25 alphanumeric characters (`A-Z`, `a-z`, `0-9`), otherwise an `IllegalArgumentException` is thrown;
+- the amount must be positive with at most 2 decimal places, and only BRL is supported.
 
 Ex:
 
@@ -36,7 +37,7 @@ PixCopyAndPaste pix = PixCopyAndPaste.builder()
         .build();
 ```
 
-Atenção (pt-br): o txid é opcional (vai como `***` quando ausente), mas se informado deve ser alfanumérico, sem `_`, `-` ou espaços (até 25 caracteres). País assume `BR`; acentos de nome e cidade são removidos.
+Atenção (pt-br): o txid é opcional (vai como `***` quando ausente), mas se informado deve ter de 1 a 25 caracteres alfanuméricos, sem `_`, `-` ou espaços. Nome e cidade são obrigatórios e têm acentos removidos; país assume `BR`. O valor deve ser positivo, com até 2 casas decimais.
 
 ## code
 
