@@ -3,7 +3,6 @@ package com.iskeru.javapix.pix;
 import lombok.Builder;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.text.Normalizer;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -69,9 +68,6 @@ public class PixCopyAndPaste {
             throw new IllegalArgumentException("Chave Pix inválida");
         }
 
-        // Converte o valor da transação para String
-        String valorTransacaoStr = transfer.valorTransacao().multiply(HUNDRED).setScale(0, RoundingMode.HALF_EVEN).toString();
-
         StringBuilder codeBuilder = new StringBuilder();
         // Cria o código Pix
         add(codeBuilder, Fields.PAYLOAD_FORMAT_INDICATOR, "01");
@@ -84,7 +80,7 @@ public class PixCopyAndPaste {
 
         add(codeBuilder, Fields.MERCHANT_CATEGORY, Fields.EMPTY_MERCHANT);
 
-        if (transfer != null && (transfer.currency() == null || "BRL".equals(transfer.currency()))) {
+        if (transfer.currency() == null || "BRL".equals(transfer.currency())) {
             add(codeBuilder, Fields.TRANSACTION_CURRENCY, Fields.TRANSACTION_CURRENCY_BRL);
         }
         add(codeBuilder, Fields.TRANSACTION_VALUE, transfer.valorTransacao().setScale(2).toString());
@@ -92,10 +88,10 @@ public class PixCopyAndPaste {
         // 58 is mandatory: default to BR
         String pais = to.pais() != null && !to.pais().isEmpty() ? to.pais() : PixTarget.BRASIL;
         add(codeBuilder, Fields.MERCHANT_COUNTRY, pais);
-        if (to != null && to.nome() != null && !to.nome().isEmpty()) {
+        if (to.nome() != null && !to.nome().isEmpty()) {
             add(codeBuilder, Fields.MERCHANT_NAME, stripAccents(to.nome()), Fields.MERCHANT_NAME_MAXLENGTH);
         }
-        if (to != null && to.cidade() != null && !to.cidade().isEmpty()) {
+        if (to.cidade() != null && !to.cidade().isEmpty()) {
             add(codeBuilder, Fields.MERCHANT_CITY, stripAccents(to.cidade()), Fields.MERCHANT_CITY_MAXLENGTH);
         }
 
@@ -149,18 +145,10 @@ public class PixCopyAndPaste {
      * @param maxLength optional maximum value length; if value exceeds it, it will be truncated
      */
     public void add(StringBuilder sb, String field, String value, Optional<Integer> maxLength) {
-        sb.append(field);
-        int valLen = value.length();
-        if (valLen < 10) {
-            sb.append("0");
-        }
-        if (maxLength.isEmpty() || maxLength.get() >= valLen) {
-            sb.append(valLen);
-            sb.append(value);
-        } else {
-            sb.append(maxLength.get());
-            sb.append(value, 0, maxLength.get());
-        }
+        String v = maxLength.isPresent() && value.length() > maxLength.get()
+                ? value.substring(0, maxLength.get())
+                : value;
+        sb.append(field).append(String.format("%02d", v.length())).append(v);
     }
 
     /**
