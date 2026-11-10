@@ -60,12 +60,18 @@ public class PixCopyAndPaste {
             throw new IllegalArgumentException("Valor da transação inválido");
         }
 
-        if (to == null || to.cidade() != null && to.cidade().length() > 50) {
-            throw new IllegalArgumentException("Cidade inválida");
-        }
-
         if (to == null || to.chavePix() == null || to.chavePix().isEmpty()) {
             throw new IllegalArgumentException("Chave Pix inválida");
+        }
+
+        // 59 and 60 are mandatory
+        String nome = toAscii(to.nome());
+        if (nome.isEmpty()) {
+            throw new IllegalArgumentException("Nome do recebedor é obrigatório");
+        }
+        String cidade = toAscii(to.cidade());
+        if (cidade.isEmpty()) {
+            throw new IllegalArgumentException("Cidade do recebedor é obrigatória");
         }
 
         StringBuilder codeBuilder = new StringBuilder();
@@ -88,12 +94,8 @@ public class PixCopyAndPaste {
         // 58 is mandatory: default to BR
         String pais = to.pais() != null && !to.pais().isEmpty() ? to.pais() : PixTarget.BRASIL;
         add(codeBuilder, Fields.MERCHANT_COUNTRY, pais);
-        if (to.nome() != null && !to.nome().isEmpty()) {
-            add(codeBuilder, Fields.MERCHANT_NAME, stripAccents(to.nome()), Fields.MERCHANT_NAME_MAXLENGTH);
-        }
-        if (to.cidade() != null && !to.cidade().isEmpty()) {
-            add(codeBuilder, Fields.MERCHANT_CITY, stripAccents(to.cidade()), Fields.MERCHANT_CITY_MAXLENGTH);
-        }
+        add(codeBuilder, Fields.MERCHANT_NAME, nome, Fields.MERCHANT_NAME_MAXLENGTH);
+        add(codeBuilder, Fields.MERCHANT_CITY, cidade, Fields.MERCHANT_CITY_MAXLENGTH);
 
         // 62 is mandatory: txid "***" means no txid informed
         String txid = transfer.idTransacao();
@@ -117,11 +119,15 @@ public class PixCopyAndPaste {
     }
 
     /**
-     * Removes accents (e.g. "São" becomes "Sao"): accented characters take more than one byte
-     * and break the declared field length.
+     * Removes accents (e.g. "São" becomes "Sao"), drops any remaining non-printable-ASCII character
+     * and trims. Non-ASCII characters take more than one byte and break the declared field length.
      */
-    static String stripAccents(String value) {
-        return Normalizer.normalize(value, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+    static String toAscii(String value) {
+        if (value == null) {
+            return "";
+        }
+        String noAccents = Normalizer.normalize(value, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        return noAccents.replaceAll("[^\\x20-\\x7E]", "").trim();
     }
 
     /**
