@@ -56,9 +56,44 @@ public class PixCopyAndPasteTest {
     }
 
     @Test
+    void txidLongerThan25IsRejectedNotTruncated() {
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target(), tx().idTransacao("A".repeat(26)))::generate);
+        Assertions.assertTrue(pix(target(), tx().idTransacao("A".repeat(25))).generate(false).endsWith("0525" + "A".repeat(25)));
+    }
+
+    @Test
     void cityIsCappedAndAccentsRemoved() {
         Assertions.assertTrue(pix(target().cidade("São José dos Campos").nome("João Conceição"), tx().idTransacao("myidis1"))
                 .generate(false).contains("5914Joao Conceicao6015Sao Jose dos Ca62"));
+    }
+
+    @Test
+    void nameAndCityAreRequired() {
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target().nome(null), tx())::generate);
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target().cidade(" "), tx())::generate);
+    }
+
+    @Test
+    void nonAsciiIsDroppedFromNameAndCity() {
+        Assertions.assertTrue(pix(target().nome("Café ☕ Bar").cidade(" RIO "), tx()).generate(false)
+                .contains("5909Cafe  Bar6003RIO62"));
+    }
+
+    @Test
+    void invalidAmountsAreRejected() {
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target(), tx().valorTransacao(new BigDecimal("1.234")))::generate);
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target(), tx().valorTransacao(BigDecimal.ZERO))::generate);
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target(), tx().valorTransacao(new BigDecimal("-1")))::generate);
+    }
+
+    @Test
+    void nonBrlCurrencyIsRejected() {
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target(), tx().currency("USD"))::generate);
+    }
+
+    @Test
+    void fieldLongerThan99BytesIsRejected() {
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target().chavePix("k".repeat(100)), tx())::generate);
     }
 
     @Test
