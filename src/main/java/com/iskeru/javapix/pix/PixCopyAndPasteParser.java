@@ -72,6 +72,9 @@ public final class PixCopyAndPasteParser {
             } else if (id.equals(PixCopyAndPaste.Fields.ADDITIONAL_DATA)) {
                 // Nested TLV for TXID (05)
                 txid = extractTxId(value);
+                if (PixCopyAndPaste.Fields.ADDITIONAL_DATA_TXID_NONE.equals(txid)) {
+                    txid = null; // "***" means no txid informed
+                }
             } else if (id.equals(PixCopyAndPaste.Fields.CRC16)) {
                 // already validated above; nothing to do
             } else {
