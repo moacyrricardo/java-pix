@@ -4,7 +4,9 @@ import lombok.Builder;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.text.Normalizer;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * Builder for PIX "copia e cola" (copy and paste) payload strings.
@@ -87,21 +89,26 @@ public class PixCopyAndPaste {
         }
         add(codeBuilder, Fields.TRANSACTION_VALUE, transfer.valorTransacao().setScale(2).toString());
 
-        if (to != null && to.pais() != null && !to.pais().isEmpty()) {
-            add(codeBuilder, Fields.MERCHANT_COUNTRY, to.pais());
-        }
+        // 58 is mandatory: default to BR
+        String pais = to.pais() != null && !to.pais().isEmpty() ? to.pais() : PixTarget.BRASIL;
+        add(codeBuilder, Fields.MERCHANT_COUNTRY, pais);
         if (to != null && to.nome() != null && !to.nome().isEmpty()) {
-            add(codeBuilder, Fields.MERCHANT_NAME, to.nome(), Fields.MERCHANT_NAME_MAXLENGTH);
+            add(codeBuilder, Fields.MERCHANT_NAME, stripAccents(to.nome()), Fields.MERCHANT_NAME_MAXLENGTH);
         }
         if (to != null && to.cidade() != null && !to.cidade().isEmpty()) {
-            add(codeBuilder, Fields.MERCHANT_CITY, to.cidade());
+            add(codeBuilder, Fields.MERCHANT_CITY, stripAccents(to.cidade()), Fields.MERCHANT_CITY_MAXLENGTH);
         }
 
-        if (transfer.idTransacao() != null && !transfer.idTransacao().isEmpty()) {
-            StringBuilder addData = new StringBuilder();
-            add(addData, Fields.ADDITIONAL_DATA_TXID, transfer.idTransacao(), Fields.ADDITIONAL_DATA_TXID_MAXLENGTH);
-            add(codeBuilder, Fields.ADDITIONAL_DATA, addData.toString());
+        // 62 is mandatory: txid "***" means no txid informed
+        String txid = transfer.idTransacao();
+        if (txid == null || txid.isEmpty()) {
+            txid = Fields.ADDITIONAL_DATA_TXID_NONE;
+        } else if (!Fields.ADDITIONAL_DATA_TXID_CHARSET.matcher(txid).matches()) {
+            throw new IllegalArgumentException("txid deve conter apenas caracteres alfanuméricos (A-Z, a-z, 0-9): " + txid);
         }
+        StringBuilder addData = new StringBuilder();
+        add(addData, Fields.ADDITIONAL_DATA_TXID, txid, Fields.ADDITIONAL_DATA_TXID_MAXLENGTH);
+        add(codeBuilder, Fields.ADDITIONAL_DATA, addData.toString());
 
         if (withCrc) {
             // Formata o CRC16 como uma string hexadecimal
@@ -112,6 +119,15 @@ public class PixCopyAndPaste {
 
         return codeBuilder.toString();
     }
+
+    /**
+     * Removes accents (e.g. "São" becomes "Sao"): accented characters take more than one byte
+     * and break the declared field length.
+     */
+    static String stripAccents(String value) {
+        return Normalizer.normalize(value, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+    }
+
     /**
      * Appends a TLV (tag-length-value) field to the given buffer.
      *
@@ -163,6 +179,9 @@ public class PixCopyAndPaste {
 
         private static Optional<Integer> ADDITIONAL_DATA_TXID_MAXLENGTH = Optional.of(25);
         public static String ADDITIONAL_DATA_TXID = "05";
+        /** Value used in field 62.05 when no txid is informed (static BR Code). */
+        public static String ADDITIONAL_DATA_TXID_NONE = "***";
+        static Pattern ADDITIONAL_DATA_TXID_CHARSET = Pattern.compile("[A-Za-z0-9]+");
 
         public static String MERCHANT_CATEGORY = "52";
         public static String EMPTY_MERCHANT = "0000";
@@ -175,6 +194,7 @@ public class PixCopyAndPaste {
         public static String MERCHANT_NAME = "59";
         static Optional<Integer> MERCHANT_NAME_MAXLENGTH = Optional.of(25);
         public static String MERCHANT_CITY = "60";
+        static Optional<Integer> MERCHANT_CITY_MAXLENGTH = Optional.of(15);
 
         /** Field identifier for the CRC-16 result. */
         public static String CRC16 = "63";
