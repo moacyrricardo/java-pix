@@ -80,6 +80,18 @@ public class PixCopyAndPasteTest {
     }
 
     @Test
+    void invalidAmountsAreRejected() {
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target(), tx().valorTransacao(new BigDecimal("1.234")))::generate);
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target(), tx().valorTransacao(BigDecimal.ZERO))::generate);
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target(), tx().valorTransacao(new BigDecimal("-1")))::generate);
+    }
+
+    @Test
+    void nonBrlCurrencyIsRejected() {
+        Assertions.assertThrows(IllegalArgumentException.class, pix(target(), tx().currency("USD"))::generate);
+    }
+
+    @Test
     void testItau() {
         PixCopyAndPaste pix = pix(
                 PixTarget.builder().chavePix("my-email-key@email.com").pais(PixTarget.BRASIL).cidade("SAO PAULO").nome("MY super user name blabla"),
